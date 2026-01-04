@@ -1,0 +1,69 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const connectDB = require('./config/db');
+const device = require('express-device');
+
+// Import routes
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/user');
+const profileRoutes = require('./routes/profile');
+
+const app = express();
+
+
+// Connect to MongoDB
+connectDB().then(() => {
+  const { initSystemBadges } = require('./services/badgeService');
+  initSystemBadges();
+});
+
+// Middleware
+// Middleware
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+app.use(express.json());
+app.use(device.capture());
+
+// Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/users', require('./routes/user'));
+app.use('/api/profiles', require('./routes/profile'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/upload', require('./routes/upload'));
+app.use('/api/store', require('./routes/store'));
+app.use('/api/badges', require('./routes/badge'));
+app.use('/api/discord', require('./routes/discord'));
+app.use('/api/analytics', require('./routes/analytics'));
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Vynn API is running' });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Vynn API running on port ${PORT}`);
+});
