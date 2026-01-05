@@ -30,6 +30,7 @@ router.get('/@me', auth, async (req, res) => {
             profile,
             user: {
                 username: req.user.username,
+                tag: req.user.tag,
                 displayName: req.user.displayName,
                 level: req.user.level,
                 isVerified: req.user.isVerified,
@@ -249,7 +250,7 @@ router.get('/:username', optionalAuth, async (req, res) => {
         const { username } = req.params;
 
         const user = await User.findOne({ username: username.toLowerCase() })
-            .select('username displayName level xp discord createdAt badges isVerified')
+            .select('username displayName tag level xp discord createdAt badges isVerified')
             .populate('badges');
 
         if (!user) {
@@ -278,6 +279,7 @@ router.get('/:username', optionalAuth, async (req, res) => {
         res.json({
             user: {
                 username: user.username,
+                tag: user.tag,
                 displayName: user.displayName,
                 level: user.level,
                 isVerified: user.isVerified,

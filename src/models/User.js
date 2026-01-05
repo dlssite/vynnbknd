@@ -111,6 +111,88 @@ const userSchema = new mongoose.Schema({
         }]
     },
 
+    // Credit System
+    credits: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    creditHistory: [{
+        amount: Number,
+        type: {
+            type: String,
+            enum: ['earned', 'spent', 'refund', 'admin']
+        },
+        source: {
+            type: String,
+            enum: ['referral', 'purchase', 'level_up', 'achievement', 'admin', 'signup_bonus']
+        },
+        description: String,
+        relatedItem: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'StoreItem'
+        },
+        timestamp: {
+            type: Date,
+            default: Date.now
+        }
+    }],
+
+    // Referral System
+    referralCode: {
+        type: String,
+        unique: true,
+        sparse: true,
+        uppercase: true,
+        index: true
+    },
+    premiumReferralCode: {
+        type: String,
+        unique: true,
+        sparse: true,
+        lowercase: true,
+        index: true
+        // Format: vynn+username
+    },
+    referredBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    referredByCode: String, // Track which code was used
+    referrals: [{
+        user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        codeUsed: String, // Track which code they used
+        referredAt: {
+            type: Date,
+            default: Date.now
+        },
+        rewardClaimed: {
+            type: Boolean,
+            default: false
+        }
+    }],
+    referralStats: {
+        totalReferrals: {
+            type: Number,
+            default: 0
+        },
+        activeReferrals: {
+            type: Number,
+            default: 0
+        },
+        totalXPEarned: {
+            type: Number,
+            default: 0
+        },
+        totalCreditsEarned: {
+            type: Number,
+            default: 0
+        }
+    },
+
     // Timestamps
     createdAt: {
         type: Date,
@@ -121,10 +203,165 @@ const userSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Generate unique referral code
+userSchema.methods.generateReferralCode = async function () {
+    if (this.referralCode) return this.referralCode;
+
+    let isUnique = false;
+    let newCode;
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+    while (!isUnique) {
+        newCode = 'VYNN-';
+        for (let i = 0; i < 4; i++) {
+            newCode += characters.charAt(Math.floor(Math.random() * characters.length));
+        }
+        const existing = await this.constructor.findOne({ referralCode: newCode });
+        if (!existing) isUnique = true;
+    }
+
+    this.referralCode = newCode;
+    return newCode;
+};
+
+// Generate premium referral code
+userSchema.methods.generatePremiumReferralCode = async function () {
+    if (!this.isPremium || !this.username) return null;
+
+    // vynn+username format
+    const code = `vynn+${this.username.toLowerCase()}`;
+
+    // Check if taken (unlikely unless username collision logic failed elsewhere)
+    const existing = await this.constructor.findOne({ premiumReferralCode: code });
+    if (existing && existing._id.toString() !== this._id.toString()) {
+        return null; // Should handle this edge case if it ever happens
+    }
+
+    this.premiumReferralCode = code;
+    return code;
+};
+
+// Add Credits
+userSchema.methods.addCredits = async function (amount, source, description, relatedItem = null) {
+    if (this.credits === undefined) this.credits = 0;
+    if (!this.creditHistory) this.creditHistory = [];
+    if (!this.referralStats) this.referralStats = { totalReferrals: 0, activeReferrals: 0, totalXPEarned: 0, totalCreditsEarned: 0 };
+
+    this.credits += amount;
+    this.creditHistory.push({
+        amount,
+        type: 'earned',
+        source,
+        description,
+        relatedItem
+    });
+
+    if (source === 'referral') {
+        this.referralStats.totalCreditsEarned += amount;
+    }
+
+    await this.save();
+    return this.credits;
+};
+
+// Spend Credits
+userSchema.methods.spendCredits = async function (amount, relatedItem, description) {
+    if (this.credits === undefined) this.credits = 0;
+    if (!this.creditHistory) this.creditHistory = [];
+
+    if (this.credits < amount) {
+        throw new Error('Insufficient credits');
+    }
+
+    this.credits -= amount;
+    this.creditHistory.push({
+        amount,
+        type: 'spent',
+        source: 'purchase',
+        description,
+        relatedItem
+    });
+
+    await this.save();
+    return this.credits;
+};
+
+// Add Referral
+userSchema.methods.addReferral = async function (userId, codeUsed) {
+    if (!this.referrals) this.referrals = [];
+    if (!this.referralStats) this.referralStats = { totalReferrals: 0, activeReferrals: 0, totalXPEarned: 0, totalCreditsEarned: 0 };
+
+    // Check if already referred
+    if (this.referrals.some(r => r.user.toString() === userId.toString())) {
+        return;
+    }
+
+    this.referrals.push({
+        user: userId,
+        codeUsed,
+        rewardClaimed: true // Rewards are given immediately in this implementation
+    });
+
+    this.referralStats.totalReferrals += 1;
+    this.referralStats.activeReferrals += 1; // Initially active
+
+    await this.save();
+};
+
+// Pre-save to handle premium code generation
+userSchema.pre('save', async function (next) {
+    // Initialize missing fields for legacy users to prevent crashes
+    if (this.credits === undefined) this.credits = 0;
+    if (!this.creditHistory) this.creditHistory = [];
+    if (!this.referrals) this.referrals = [];
+    if (!this.referralStats) {
+        this.referralStats = {
+            totalReferrals: 0,
+            activeReferrals: 0,
+            totalXPEarned: 0,
+            totalCreditsEarned: 0
+        };
+    }
+
+    // Ensure premium code exists if user is premium
+    if (this.isPremium && !this.premiumReferralCode) {
+        if (!this.username) {
+            // If username not set yet (creation), wait for it? 
+        } else {
+            // vynn+username format
+            const code = `vynn+${this.username.toLowerCase()}`;
+            // Check if exists
+            const existing = await this.constructor.findOne({ premiumReferralCode: code });
+            if (!existing) {
+                this.premiumReferralCode = code;
+            }
+        }
+    }
+
+    // Generate standard code if missing (auto-migrate existing users)
+    if (!this.referralCode) {
+        let isUnique = false;
+        let newCode;
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+        while (!isUnique) {
+            newCode = 'VYNN-';
+            for (let i = 0; i < 4; i++) {
+                newCode += characters.charAt(Math.floor(Math.random() * characters.length));
+            }
+            const existing = await this.constructor.findOne({ referralCode: newCode });
+            if (!existing) isUnique = true;
+        }
+        this.referralCode = newCode;
+    }
+
+    next();
+});
+
 // Set verifiedAt when isVerified becomes true
 userSchema.pre('save', async function (next) {
-    // Generate random 4-digit tag for new users if not set
-    if (this.isNew && (!this.tag || this.tag === '0000')) {
+    // Generate random 4-digit tag for any user if missing or default
+    if (!this.tag || this.tag === '0000') {
         let isUnique = false;
         let newTag;
 

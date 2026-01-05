@@ -28,7 +28,8 @@ router.post('/register', [
     body('username')
         .isLength({ min: 3, max: 20 })
         .matches(/^[a-z0-9_]+$/)
-        .withMessage('Username must be 3-20 characters, lowercase letters, numbers, and underscores only')
+        .withMessage('Username must be 3-20 characters, lowercase letters, numbers, and underscores only'),
+    body('referralCode').optional().isString().trim()
 ], async (req, res) => {
     try {
         const errors = validationResult(req);
@@ -36,7 +37,7 @@ router.post('/register', [
             return res.status(400).json({ errors: errors.array() });
         }
 
-        const { email, password, username } = req.body;
+        const { email, password, username, referralCode } = req.body;
 
         // Check if email exists
         const existingEmail = await User.findOne({ email });
@@ -50,14 +51,56 @@ router.post('/register', [
             return res.status(400).json({ error: 'Username already taken' });
         }
 
+        // Validate referral code if provided
+        let referrer = null;
+        if (referralCode) {
+            const code = referralCode.trim();
+            // Check both standard (VYNN-XXXX) and premium (vynn+username) formats
+            referrer = await User.findOne({
+                $or: [
+                    { referralCode: code.toUpperCase() },
+                    { premiumReferralCode: code.toLowerCase() }
+                ]
+            });
+
+            if (!referrer) {
+                return res.status(400).json({ error: 'Invalid referral code' });
+            }
+
+            // Prevent self-referral logic is mostly redundant here as it's a new user, 
+            // but checked against existing users above. 
+            // However, we just need to ensure the referral code doesn't somehow belong to 
+            // the email/username being created (which isn't saved yet, so impossible).
+        }
+
         // Create user
         const user = new User({
             email,
             password,
             username: username.toLowerCase(),
-            displayName: username
+            displayName: username,
+            referredBy: referrer?._id,
+            referredByCode: referralCode || null
         });
         await user.save();
+
+        // Process referral rewards if exists
+        if (referrer) {
+            // Add referral to referrer's list
+            await referrer.addReferral(user._id, referralCode);
+
+            // Grant rewards to referee (new user)
+            await user.addXP(50); // Bonus XP
+            await user.addCredits(25, 'signup_bonus', 'Referral signup bonus');
+
+            // Grant rewards to referrer
+            await referrer.addXP(100); // Referral XP
+            await referrer.addCredits(50, 'referral', `Referred ${user.username}`);
+
+            // Check for referral milestone badges
+            const { checkReferralBadges } = require('../services/badgeService');
+            await checkReferralBadges(referrer._id);
+        }
 
         // Create default profile
         const profile = new Profile({
@@ -157,11 +200,18 @@ router.post('/logout', auth, (req, res) => {
 // @access  Private
 router.get('/me', auth, async (req, res) => {
     try {
-        const { syncUserDiscordBadges } = require('../services/badgeService');
+        const { checkAutomaticBadges } = require('../services/badgeService');
 
         const user = await User.findById(req.user._id).select('-password');
-        await syncUserDiscordBadges(user);
-        const profile = await Profile.findOne({ user: req.user._id });
+        await checkAutomaticBadges(user._id);
+
+        let profile = await Profile.findOne({ user: req.user._id });
+
+        // Self-healing: Create profile if missing (e.g. from partial registration)
+        if (!profile) {
+            profile = new Profile({ user: req.user._id });
+            await profile.save();
+        }
 
         res.json({
             user: {
@@ -172,6 +222,7 @@ router.get('/me', auth, async (req, res) => {
                 tag: user.tag,
                 level: user.level,
                 xp: user.xp,
+                credits: user.credits,
                 role: user.role,
                 isPremium: user.isPremium,
                 discord: user.discord ? {
@@ -185,6 +236,7 @@ router.get('/me', auth, async (req, res) => {
                 bio: profile.bio,
                 avatar: profile.avatar,
                 banner: profile.banner,
+                isNSFW: profile.isNSFW,
                 views: profile.views
             } : null
         });

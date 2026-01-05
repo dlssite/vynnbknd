@@ -34,7 +34,15 @@ router.post('/start', async (req, res) => {
         const deviceType = req.device ? req.device.type : 'desktop';
 
         // Geo Location
-        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+        if (ip.includes(',')) {
+            ip = ip.split(',')[0].trim();
+        }
+        // Clean IPv6 prefix if present
+        if (ip.startsWith('::ffff:')) {
+            ip = ip.substring(7);
+        }
+
         const { country, code } = getCountryFromIp(ip);
 
         // Create Session

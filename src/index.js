@@ -10,6 +10,7 @@ const userRoutes = require('./routes/user');
 const profileRoutes = require('./routes/profile');
 
 const app = express();
+app.set('trust proxy', 1); // Trust first proxy (Nginx/Netlify/Cloudflare)
 
 
 // Connect to MongoDB
@@ -49,6 +50,7 @@ app.use('/api/store', require('./routes/store'));
 app.use('/api/badges', require('./routes/badge'));
 app.use('/api/discord', require('./routes/discord'));
 app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/referral', require('./routes/referral'));
 
 // Health check
 app.get('/api/health', (req, res) => {

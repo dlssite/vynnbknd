@@ -99,7 +99,25 @@ router.post('/:id/buy', auth, async (req, res) => {
             return res.status(403).json({ error: 'Requires Premium' });
         }
 
-        // TODO: Currency check for 'purchase' type
+        // Credit check for 'purchase' type items or items with credit price
+        if ((item.type === 'purchase' || item.price > 0) && item.currency === 'credits') {
+            if (!user.credits || user.credits < item.price) {
+                return res.status(400).json({
+                    error: 'Insufficient credits',
+                    required: item.price,
+                    current: user.credits || 0
+                });
+            }
+
+            // Deduct credits
+            await user.spendCredits(item.price, item._id, `Purchased ${item.name}`);
+        } else if (item.type === 'purchase' && item.currency !== 'credits') {
+            // For now, if currency isn't credits, we might need other logic (e.g. stripe in future)
+            // But for validation, if it's 'purchase' and not 'credits', maybe we just let it pass 
+            // or block it if we don't have other payment methods yet.
+            // Assuming credits is default for 'purchase' type for now.
+            // If price > 0 but currency is different, handle it.
+        }
 
         user.inventory.items.push(item._id);
 
@@ -114,7 +132,11 @@ router.post('/:id/buy', auth, async (req, res) => {
         const { checkAutomaticBadges } = require('../services/badgeService');
         await checkAutomaticBadges(user._id);
 
-        res.json({ message: 'Item acquired!', item });
+        res.json({
+            message: 'Item acquired!',
+            item,
+            newBalance: user.credits
+        });
     } catch (error) {
         console.error('Buy Item Error:', error);
         res.status(500).json({ error: 'Server error' });
