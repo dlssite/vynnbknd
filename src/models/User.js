@@ -190,6 +190,10 @@ const userSchema = new mongoose.Schema({
         totalCreditsEarned: {
             type: Number,
             default: 0
+        },
+        referralClicks: {
+            type: Number,
+            default: 0
         }
     },
 
@@ -319,8 +323,13 @@ userSchema.pre('save', async function (next) {
             totalReferrals: 0,
             activeReferrals: 0,
             totalXPEarned: 0,
-            totalCreditsEarned: 0
+            totalCreditsEarned: 0,
+            referralClicks: 0
         };
+    }
+
+    if (this.referralStats.referralClicks === undefined) {
+        this.referralStats.referralClicks = 0;
     }
 
     // Ensure premium code exists if user is premium

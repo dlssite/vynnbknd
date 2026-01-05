@@ -1,19 +1,26 @@
 const axios = require('axios');
+const SystemConfig = require('../models/SystemConfig');
 
 /**
- * Fetches Discord presence using Lanyard API.
- * Lanyard requires the user to be in the Lanyard Discord server (discord.gg/lanyard)
- * to work automatically.
- * 
- * @param {string} discordId - The user's Discord ID.
- * @returns {Promise<Object|null>} - Presence data or null if not found.
+ * Helper to get the current bot configuration
+ */
+const getBotConfig = async () => {
+    const config = await SystemConfig.getOrCreate();
+    return {
+        url: config.botApiUrl || process.env.BOT_API_URL || 'http://localhost:6000',
+        guildId: config.primaryGuildId || process.env.PRIMARY_GUILD_ID
+    };
+};
+
+/**
+ * Fetches Discord presence using Bot API.
  */
 const getDiscordPresence = async (discordId) => {
     try {
         if (!discordId) return null;
 
-        const BOT_API_URL = process.env.BOT_API_URL || 'http://localhost:6000';
-        const response = await axios.get(`${BOT_API_URL}/presence/${discordId}`);
+        const config = await getBotConfig();
+        const response = await axios.get(`${config.url}/presence/${discordId}`);
 
         if (response.data) {
             return response.data;
@@ -21,7 +28,6 @@ const getDiscordPresence = async (discordId) => {
 
         return null;
     } catch (error) {
-        // If 404, it means the user is not in any shared servers with the bot
         if (error.response && error.response.status === 404) {
             return null;
         }
@@ -31,16 +37,16 @@ const getDiscordPresence = async (discordId) => {
 };
 
 /**
- * Fetches Discord member info (membership & boosting status) from the bot API.
- * @param {string} discordId - The user's Discord ID.
- * @returns {Promise<Object|null>} - Member info or null if not found.
+ * Fetches Discord member info from the bot API.
  */
 const getDiscordMemberInfo = async (discordId) => {
     try {
         if (!discordId) return null;
 
-        const BOT_API_URL = process.env.BOT_API_URL || 'http://localhost:6000';
-        const response = await axios.get(`${BOT_API_URL}/member/${discordId}`);
+        const config = await getBotConfig();
+        const response = await axios.get(`${config.url}/member/${discordId}`, {
+            params: { guildId: config.guildId }
+        });
 
         if (response.data) {
             return response.data;
@@ -48,7 +54,6 @@ const getDiscordMemberInfo = async (discordId) => {
 
         return null;
     } catch (error) {
-        // If 404, user is not in the server
         if (error.response && error.response.status === 404) {
             return { is_member: false, is_booster: false };
         }
@@ -58,16 +63,14 @@ const getDiscordMemberInfo = async (discordId) => {
 };
 
 /**
- * Fetches Discord server information (metadata) from the bot API.
- * @param {string} inviteOrId - The Discord Server ID or Invite Link.
- * @returns {Promise<Object|null>} - Server info or null if not found.
+ * Fetches Discord server information from the bot API.
  */
 const getDiscordServerInfo = async (inviteOrId) => {
     try {
         if (!inviteOrId) return null;
 
-        const BOT_API_URL = process.env.BOT_API_URL || 'http://localhost:6000';
-        const response = await axios.get(`${BOT_API_URL}/server/${inviteOrId}`);
+        const config = await getBotConfig();
+        const response = await axios.get(`${config.url}/server/${inviteOrId}`);
 
         if (response.data) {
             return response.data;

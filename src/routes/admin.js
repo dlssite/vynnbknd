@@ -3,6 +3,8 @@ const router = express.Router();
 const User = require('../models/User');
 const Profile = require('../models/Profile');
 const Badge = require('../models/Badge');
+const SystemConfig = require('../models/SystemConfig');
+const VisitSession = require('../models/VisitSession');
 const { requireAdmin, requireSuperAdmin } = require('../middleware/adminAuth');
 
 // @route   GET /api/admin/stats
@@ -189,20 +191,114 @@ router.get('/analytics/detailed', requireAdmin, async (req, res) => {
 // @access  Admin
 router.get('/users/:id/metrics', requireAdmin, async (req, res) => {
     try {
-        const user = await User.findById(req.params.id).populate('inventory.items');
-        const profile = await Profile.findOne({ user: req.params.id });
+        const user = await User.findById(req.params.id)
+            .populate('inventory.items')
+            .populate('badges')
+            .populate('referredBy', 'username email');
 
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        const profile = await Profile.findOne({ user: req.params.id })
+            .populate('frame')
+            .populate('displayedBadges');
+
+        // Get people this user referred
+        const referrals = await User.find({ referredBy: user._id })
+            .select('username email createdAt referralStats');
+
+        // Aggregated Visit Analytics for this specific profile
+        let analytics = {
+            totalUniqueVisitors: 0,
+            deviceBreakdown: {},
+            countryBreakdown: {},
+            referrerBreakdown: {}
+        };
+
+        if (profile) {
+            const visitorStats = await VisitSession.aggregate([
+                { $match: { profileId: profile._id } },
+                {
+                    $group: {
+                        _id: null,
+                        uniqueVisitors: { $addToSet: "$visitorId" },
+                        devices: { $push: "$deviceType" },
+                        countries: { $push: "$country" },
+                        referrers: { $push: "$referrer" }
+                    }
+                }
+            ]);
+
+            if (visitorStats.length > 0) {
+                const stats = visitorStats[0];
+                analytics.totalUniqueVisitors = stats.uniqueVisitors.length;
+
+                // Simple frequency counts
+                const countOccurrences = (arr) => arr.reduce((acc, curr) => {
+                    acc[curr] = (acc[curr] || 0) + 1;
+                    return acc;
+                }, {});
+
+                analytics.deviceBreakdown = countOccurrences(stats.devices);
+                analytics.countryBreakdown = countOccurrences(stats.countries);
+                analytics.referrerBreakdown = countOccurrences(stats.referrers);
+            }
+        }
+
         res.json({
+            // Core Identity Mirror
+            _id: user._id,
+            username: user.username,
+            displayName: user.displayName,
+            email: user.email,
+            role: user.role,
+            isVerified: user.isVerified,
+            isOnline: user.lastLoginAt && (new Date() - new Date(user.lastLoginAt) < 1000 * 60 * 5),
+            avatar: profile?.avatar,
+            banner: profile?.banner,
+
+            // Progression
+            xp: user.xp,
+            level: user.level,
+            badges: user.badges,
+
+            // Economy
+            credits: user.credits,
+            creditHistory: user.creditHistory || [],
+
+            // Assets
+            inventory: user.inventory?.items || [],
+            frame: profile?.frame,
+            displayedBadges: profile?.displayedBadges,
+
+            // Profile Config
+            bio: profile?.bio,
+            themeConfig: profile?.themeConfig,
+            links: profile?.links,
+            socials: profile?.socials,
+
+            // Engagement & Analytics
             views: profile?.views || 0,
-            uploadCount: user.uploadCount || 0,
-            inventorySize: user.inventory?.items?.length || 0,
-            badgesCount: user.badges?.length || 0,
+            analytics,
+
+            // System Stats
             joinedAt: user.createdAt,
-            lastLogin: user.lastLoginAt
+            lastLogin: user.lastLoginAt,
+            uploadCount: user.uploadCount || 0,
+
+            // Referral Network
+            referralStats: user.referralStats,
+            referredBy: user.referredBy,
+            codeUsed: user.referredByCode,
+            referralNetwork: referrals.map(r => ({
+                id: r._id,
+                username: r.username,
+                email: r.email,
+                joinedAt: r.createdAt,
+                stats: r.referralStats
+            }))
         });
     } catch (error) {
+        console.error('User metrics error:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -624,6 +720,44 @@ router.delete('/store-items/:id', requireSuperAdmin, async (req, res) => {
         res.json({ message: 'Item deleted' });
     } catch (error) {
         console.error('Delete Item Error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ---------------------------------------------------------------------
+// SYSTEM CONFIGURATION
+// ---------------------------------------------------------------------
+
+// @route   GET /api/admin/config
+// @desc    Get full system configuration
+// @access  Super Admin
+router.get('/config', requireSuperAdmin, async (req, res) => {
+    try {
+        const config = await SystemConfig.getOrCreate();
+        res.json(config);
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// @route   PUT /api/admin/config
+// @desc    Update system configuration
+// @access  Super Admin
+router.put('/config', requireSuperAdmin, async (req, res) => {
+    try {
+        const { serverInviteLink, botInviteLink, announcement, botApiUrl, primaryGuildId } = req.body;
+        const config = await SystemConfig.getOrCreate();
+
+        if (serverInviteLink !== undefined) config.serverInviteLink = serverInviteLink;
+        if (botInviteLink !== undefined) config.botInviteLink = botInviteLink;
+        if (announcement !== undefined) config.announcement = announcement;
+        if (botApiUrl !== undefined) config.botApiUrl = botApiUrl;
+        if (primaryGuildId !== undefined) config.primaryGuildId = primaryGuildId;
+        config.updatedBy = req.user._id;
+
+        await config.save();
+        res.json(config);
+    } catch (error) {
         res.status(500).json({ error: 'Server error' });
     }
 });

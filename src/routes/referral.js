@@ -83,7 +83,8 @@ router.get('/stats', auth, async (req, res) => {
                 totalReferrals: 0,
                 activeReferrals: 0,
                 totalXPEarned: 0,
-                totalCreditsEarned: 0
+                totalCreditsEarned: 0,
+                referralClicks: 0
             }),
             currentXP: user.xp || 0,
             currentLevel: user.level || 1
@@ -232,6 +233,40 @@ router.post('/credits/gift', auth, async (req, res) => {
 
     } catch (error) {
         console.error('Gift Credits Error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// @route   POST /api/referral/click/:code
+// @desc    Track a referral link click
+// @access  Public
+router.post('/click/:code', async (req, res) => {
+    try {
+        const { code } = req.params;
+        if (!code) return res.status(400).json({ error: 'Code required' });
+
+        const referrer = await User.findOne({
+            $or: [
+                { referralCode: code.toUpperCase() },
+                { premiumReferralCode: code.toLowerCase() }
+            ]
+        });
+
+        if (!referrer) {
+            return res.status(404).json({ error: 'Invalid referral code' });
+        }
+
+        // Increment clicks
+        if (!referrer.referralStats) {
+            referrer.referralStats = { totalReferrals: 0, activeReferrals: 0, totalXPEarned: 0, totalCreditsEarned: 0, referralClicks: 0 };
+        }
+
+        referrer.referralStats.referralClicks = (referrer.referralStats.referralClicks || 0) + 1;
+        await referrer.save();
+
+        res.json({ status: 'tracked', username: referrer.username });
+    } catch (error) {
+        console.error('Track Click Error:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
