@@ -52,6 +52,7 @@ app.use('/api/discord', require('./routes/discord'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/referral', require('./routes/referral'));
 app.use('/api/config', require('./routes/config'));
+app.use('/api/og', require('./routes/og'));
 
 // Health check
 app.get('/api/health', (req, res) => {

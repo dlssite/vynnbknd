@@ -20,7 +20,7 @@ const assetSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['image', 'video', 'audio', 'other'],
+        enum: ['image', 'video', 'audio', 'other', 'background', 'avatar', 'cursor', 'frame'],
         default: 'image'
     },
     folder: {

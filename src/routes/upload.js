@@ -131,18 +131,31 @@ router.post('/', auth, parser.single('file'), async (req, res) => {
             });
         }
 
+        // Determine type: Use explicit type if valid, otherwise infer from mimetype
+        let type = 'other';
+        const explicitType = req.body.type;
+        const mime = req.file.mimetype;
+
+        if (explicitType && ['background', 'avatar', 'cursor', 'frame', 'audio'].includes(explicitType)) {
+            type = explicitType;
+        } else {
+            type = mime.startsWith('image/') ? 'image' :
+                mime.startsWith('video/') ? 'video' :
+                    mime.startsWith('audio/') ? 'audio' : 'other';
+        }
+
         // Create Asset record
         const asset = new Asset({
             user: user._id,
             url: req.file.path,
             name: req.body.name || req.file.originalname.split('.')[0],
             publicId: req.file.filename,
-            type: req.file.mimetype.startsWith('image/') ? 'image' :
-                req.file.mimetype.startsWith('video/') ? 'video' :
-                    req.file.mimetype.startsWith('audio/') ? 'audio' : 'other',
+            type: type,
             metadata: {
                 size: req.file.size,
-                format: req.file.mimetype.split('/')[1],
+                format: mime.split('/')[1],
+                type: mime.startsWith('video/') ? 'video' :
+                    mime.startsWith('audio/') ? 'audio' : 'image'
             }
         });
         await asset.save();
