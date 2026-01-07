@@ -232,8 +232,8 @@ userSchema.methods.generateReferralCode = async function () {
 userSchema.methods.generatePremiumReferralCode = async function () {
     if (!this.isPremium || !this.username) return null;
 
-    // vynn+username format
-    const code = `vynn+${this.username.toLowerCase()}`;
+    // VYNN-USERNAME format (Uppercase)
+    const code = `VYNN-${this.username.toUpperCase()}`;
 
     // Check if taken (unlikely unless username collision logic failed elsewhere)
     const existing = await this.constructor.findOne({ premiumReferralCode: code });
@@ -337,8 +337,8 @@ userSchema.pre('save', async function (next) {
         if (!this.username) {
             // If username not set yet (creation), wait for it? 
         } else {
-            // vynn+username format
-            const code = `vynn+${this.username.toLowerCase()}`;
+            // VYNN-USERNAME format (Uppercase)
+            const code = `VYNN-${this.username.toUpperCase()}`;
             // Check if exists
             const existing = await this.constructor.findOne({ premiumReferralCode: code });
             if (!existing) {

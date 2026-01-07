@@ -23,106 +23,124 @@ const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI;
 // @desc    Register a new user
 // @access  Public
 router.post(
-  '/register',
-  [
-    body('email')
-      .trim()
-      .toLowerCase()
-      .isEmail()
-      .withMessage('Valid email required'),
+    '/register',
+    [
+        body('email')
+            .trim()
+            .toLowerCase()
+            .isEmail()
+            .withMessage('Valid email required'),
 
-    body('password')
-      .isLength({ min: 6 })
-      .withMessage('Password must be at least 6 characters'),
+        body('password')
+            .isLength({ min: 6 })
+            .withMessage('Password must be at least 6 characters'),
 
-    body('username')
-      .trim()
-      .toLowerCase()
-      .isLength({ min: 3, max: 20 })
-      .matches(/^[a-z0-9_]+$/)
-      .withMessage('Username must be 3-20 characters, lowercase letters, numbers, and underscores only'),
+        body('username')
+            .trim()
+            .toLowerCase()
+            .isLength({ min: 3, max: 20 })
+            .matches(/^[a-z0-9_]+$/)
+            .withMessage('Username must be 3-20 characters, lowercase letters, numbers, and underscores only'),
 
-    body('referralCode')
-      .optional()
-      .trim()
-      .toLowerCase()
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        console.log('❌ Validation errors:', errors.array());
-        return res.status(400).json({
-          message: 'Validation failed',
-          errors: errors.array()
-        });
-      }
+        body('referralCode')
+            .optional()
+            .trim()
+            .toLowerCase()
+    ],
+    async (req, res) => {
+        try {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) {
+                console.log('❌ Validation errors:', errors.array());
+                return res.status(400).json({
+                    message: 'Validation failed',
+                    errors: errors.array()
+                });
+            }
 
-      const email = req.body.email;
-      const password = req.body.password;
-      const username = req.body.username;
-      const referralCode = req.body.referralCode || null;
+            const email = req.body.email;
+            const password = req.body.password;
+            const username = req.body.username;
+            const referralCode = req.body.referralCode || null;
 
-      // Check email
-      if (await User.findOne({ email })) {
-        return res.status(400).json({ error: 'Email already registered' });
-      }
+            // Check email
+            if (await User.findOne({ email })) {
+                return res.status(400).json({ error: 'Email already registered' });
+            }
 
-      // Check username
-      if (await User.findOne({ username })) {
-        return res.status(400).json({ error: 'Username already taken' });
-      }
+            // Check username
+            if (await User.findOne({ username })) {
+                return res.status(400).json({ error: 'Username already taken' });
+            }
 
-      // Validate referral code
-      let referrer = null;
-      if (referralCode) {
-        referrer = await User.findOne({
-          $or: [
-            { referralCode: referralCode.toUpperCase() },
-            { premiumReferralCode: referralCode }
-          ]
-        });
+            // Validate referral code
+            let referrer = null;
+            if (referralCode) {
+                referrer = await User.findOne({
+                    $or: [
+                        { referralCode: referralCode.toUpperCase() },
+                        { premiumReferralCode: referralCode.toUpperCase() }
+                    ]
+                });
 
-        if (!referrer) {
-          return res.status(400).json({ error: 'Invalid referral code' });
+                if (!referrer) {
+                    return res.status(400).json({ error: 'Invalid referral code' });
+                }
+            }
+
+            // Create user
+            const user = new User({
+                email,
+                password,
+                username,
+                displayName: username,
+                referredBy: referrer?._id || null,
+                referredByCode: referralCode
+            });
+
+            await user.save();
+
+            // Create profile
+            await new Profile({ user: user._id }).save();
+
+            // Process referral rewards if exists
+            if (referrer) {
+                // Add referral to referrer's list
+                await referrer.addReferral(user._id, referralCode);
+
+                // Grant rewards to referee (new user)
+                await user.addXP(50); // Bonus XP
+                await user.addCredits(25, 'signup_bonus', 'Referral signup bonus');
+
+                // Grant rewards to referrer
+                await referrer.addXP(100); // Referral XP
+                await referrer.addCredits(50, 'referral', `Referred ${user.username}`);
+
+                // Check for referral milestone badges
+                const { checkReferralBadges } = require('../services/badgeService');
+                await checkReferralBadges(referrer._id);
+            }
+
+            // Token
+            const token = generateToken(user._id);
+
+            res.status(201).json({
+                message: 'Account created successfully',
+                token,
+                user: {
+                    id: user._id,
+                    email: user.email,
+                    username: user.username,
+                    displayName: user.displayName,
+                    level: user.level,
+                    xp: user.xp
+                }
+            });
+        } catch (err) {
+            console.error('🔥 Registration error:', err);
+            res.status(500).json({ error: 'Server error' });
         }
-      }
-
-      // Create user
-      const user = new User({
-        email,
-        password,
-        username,
-        displayName: username,
-        referredBy: referrer?._id || null,
-        referredByCode: referralCode
-      });
-
-      await user.save();
-
-      // Create profile
-      await new Profile({ user: user._id }).save();
-
-      // Token
-      const token = generateToken(user._id);
-
-      res.status(201).json({
-        message: 'Account created successfully',
-        token,
-        user: {
-          id: user._id,
-          email: user.email,
-          username: user.username,
-          displayName: user.displayName,
-          level: user.level,
-          xp: user.xp
-        }
-      });
-    } catch (err) {
-      console.error('🔥 Registration error:', err);
-      res.status(500).json({ error: 'Server error' });
     }
-  }
 );
 
 

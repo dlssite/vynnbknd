@@ -45,11 +45,11 @@ router.post('/validate', async (req, res) => {
 
         const trimmedCode = code.trim();
 
-        // Check both standard (VYNN-XXXX) and premium (vynn+username) formats
+        // Check both standard (VYNN-XXXX) and premium (VYNN-USERNAME) formats
         const referrer = await User.findOne({
             $or: [
                 { referralCode: trimmedCode.toUpperCase() },
-                { premiumReferralCode: trimmedCode.toLowerCase() }
+                { premiumReferralCode: trimmedCode.toUpperCase() }
             ]
         }).select('username displayName avatar isPremium');
 

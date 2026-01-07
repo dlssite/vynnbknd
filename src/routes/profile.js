@@ -40,7 +40,12 @@ router.get('/@me', auth, async (req, res) => {
                     username: req.user.discord.username,
                     avatar: req.user.discord.avatar,
                     decoration: req.user.discord.decoration
-                } : null
+                } : null,
+                referralCode: req.user.referralCode,
+                premiumReferralCode: req.user.premiumReferralCode || null,
+                isPremium: req.user.isPremium,
+                isLifetimePremium: req.user.isLifetimePremium,
+                premiumUntil: req.user.premiumUntil
             }
         });
     } catch (error) {
