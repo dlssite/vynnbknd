@@ -23,19 +23,29 @@ connectDB().then(() => {
 // Middleware
 const allowedOrigins = [
   'http://localhost:5173',
+  'https://vynn.me',
+  'https://www.vynn.me',
+  'https://www.vynn-me.netlify.app',
+  'https://vynn-me.netlify.app',
   process.env.FRONTEND_URL,
   ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    // Allow non-browser requests (Postman, curl, mobile preflight)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
+
+    console.error('❌ Blocked by CORS:', origin);
+    return callback(new Error('Not allowed by CORS'));
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use(device.capture());
@@ -65,7 +75,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5002;
 
 app.listen(PORT, () => {
   console.log(`🚀 Vynn API running on port ${PORT}`);
