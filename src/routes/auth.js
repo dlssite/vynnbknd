@@ -17,7 +17,11 @@ const generateToken = (userId) => {
 // Discord Constants
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI;
+const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI ? process.env.DISCORD_REDIRECT_URI.trim() : undefined;
+
+if (!REDIRECT_URI) {
+    console.warn('⚠️ DISCORD_REDIRECT_URI is not defined in environment variables!');
+}
 
 // @route   POST /api/auth/register
 // @desc    Register a new user
@@ -299,6 +303,13 @@ router.post('/discord/unlink', auth, async (req, res) => {
 router.get('/discord', (req, res) => {
     const { token } = req.query; // Optional token for connecting
     const state = token || 'login';
+
+    if (!REDIRECT_URI) {
+        return res.status(500).json({
+            error: 'Discord configuration missing',
+            details: 'REDIRECT_URI is not configured on the server.'
+        });
+    }
 
     // identify, email, guilds (optional)
     const url = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20email&state=${state}`;
