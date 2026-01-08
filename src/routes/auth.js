@@ -190,6 +190,7 @@ router.post('/login', [
                 xp: user.xp,
                 role: user.role,
                 isPremium: user.isPremium,
+                onboardingCompleted: user.onboardingCompleted,
                 discord: user.discord ? {
                     username: user.discord.username,
                     avatar: user.discord.avatar
@@ -239,6 +240,7 @@ router.get('/me', auth, async (req, res) => {
                 credits: user.credits,
                 role: user.role,
                 isPremium: user.isPremium,
+                onboardingCompleted: user.onboardingCompleted,
                 discord: user.discord ? {
                     id: user.discord.id,
                     username: user.discord.username,
@@ -411,7 +413,8 @@ router.get('/discord/callback', async (req, res) => {
                 displayName: discordUser.username,
                 password: Math.random().toString(36).slice(-16), // Random password
                 discord: discordData,
-                isVerified: false
+                isVerified: false,
+                onboardingCompleted: false
             });
             await user.save();
 
@@ -430,6 +433,83 @@ router.get('/discord/callback', async (req, res) => {
     } catch (error) {
         console.error('Discord Auth Error:', error.response?.data || error.message);
         res.redirect(`${process.env.FRONTEND_URL}/login?error=discord_auth_failed`);
+    }
+});
+
+// @route   PUT /api/auth/onboarding
+// @desc    Complete onboarding (set username & referral)
+// @access  Private
+router.put('/onboarding', auth, async (req, res) => {
+    try {
+        const { username, referralCode } = req.body;
+
+        if (!username) {
+            return res.status(400).json({ error: 'Username is required' });
+        }
+
+        // Validate username format
+        const usernameRegex = /^[a-z0-9_]{3,20}$/;
+        if (!usernameRegex.test(username)) {
+            return res.status(400).json({ error: 'Invalid username format (3-20 chars, lowercase, numbers, underscores)' });
+        }
+
+        // Check if username taken
+        const existing = await User.findOne({ username: username.toLowerCase() });
+        if (existing && existing._id.toString() !== req.user._id.toString()) {
+            return res.status(400).json({ error: 'Username is already taken' });
+        }
+
+        const user = await User.findById(req.user._id);
+        user.username = username.toLowerCase();
+        user.onboardingCompleted = true;
+
+        // Handle referral
+        if (referralCode && !user.referredBy) {
+            const referrer = await User.findOne({
+                $or: [
+                    { referralCode: referralCode.toUpperCase() },
+                    { premiumReferralCode: referralCode }
+                ]
+            });
+
+            if (referrer && referrer._id.toString() !== user._id.toString()) {
+                user.referredBy = referrer._id;
+                user.referredByCode = referralCode;
+
+                // Add credits to both
+                await referrer.addCredits(100, 'referral', `Referral bonus from @${user.username}`);
+                await user.addCredits(100, 'referral', `Signup bonus using referral code ${referralCode}`);
+
+                // Add referral record
+                await referrer.addReferral(user._id, referralCode);
+            }
+        }
+
+        await user.save();
+        res.json({ message: 'Onboarding completed', user });
+    } catch (error) {
+        console.error('Onboarding error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// @route   DELETE /api/auth/account
+// @desc    Delete user account and all related data
+// @access  Private
+router.delete('/account', auth, async (req, res) => {
+    try {
+        const userId = req.user._id;
+
+        // Delete profile
+        await Profile.findOneAndDelete({ user: userId });
+
+        // Delete user
+        await User.findByIdAndDelete(userId);
+
+        res.json({ message: 'Account and profile deleted successfully' });
+    } catch (error) {
+        console.error('Delete account error:', error);
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
