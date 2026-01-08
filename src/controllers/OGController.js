@@ -4,13 +4,22 @@ const path = require('path');
 const fs = require('fs');
 
 // Register font (optional, if you have custom fonts)
+const User = require('../models/User');
+
+// Register font (optional, if you have custom fonts)
 // registerFont(path.join(__dirname, '../assets/fonts/Inter-Bold.ttf'), { family: 'Inter', weight: 'bold' });
 
 exports.generateProfileImage = async (req, res) => {
     try {
-        const username = req.params.username;
-        const profile = await Profile.findOne({ username });
+        const username = req.params.username.toLowerCase();
 
+        // Find user first to get the ID, as Profile doesn't store username
+        const user = await User.findOne({ username });
+        if (!user) {
+            return res.status(404).send('User not found');
+        }
+
+        const profile = await Profile.findOne({ user: user._id });
         if (!profile) {
             return res.status(404).send('Profile not found');
         }
@@ -41,7 +50,7 @@ exports.generateProfileImage = async (req, res) => {
 
         try {
             // Use default if no avatar
-            const avatarUrl = profile.avatar || 'https://vynn.io/logo.png';
+            const avatarUrl = profile.avatar || 'https://vynn.me/logo.png';
             const avatar = await loadImage(avatarUrl);
 
             // Circular clipping for avatar
@@ -54,13 +63,8 @@ exports.generateProfileImage = async (req, res) => {
             ctx.restore();
 
             // 4. User Frame (if applicable)
-            // Assuming profile.equippedFrame is a URL or we map IDs to local paths
-            // For now, let's assume it's a URL in profile.equippedFrameUrl or similar
             if (profile.frame) {
                 // If frame logic is complex (e.g. mapping ID to asset), handle here.
-                // Assuming raw URL for simplicity or skipping if specific logic needed.
-                // const frame = await loadImage(profile.frame);
-                // ctx.drawImage(frame, avatarX - 20, avatarY - 20, avatarSize + 40, avatarSize + 40);
             }
         } catch (err) {
             console.error('Error loading avatar:', err);
@@ -87,18 +91,18 @@ exports.generateProfileImage = async (req, res) => {
         ctx.shadowColor = "rgba(0,0,0,0.5)";
         ctx.shadowBlur = 20;
 
-        const displayName = profile.displayName || profile.username;
+        const displayName = user.displayName || user.username;
         ctx.fillText(displayName, width / 2, avatarY + avatarSize + 90);
 
         // 7. Text: Username (@username)
         ctx.fillStyle = '#cccccc';
         ctx.font = '40px Sans-serif';
-        ctx.fillText(`@${profile.username}`, width / 2, avatarY + avatarSize + 150);
+        ctx.fillText(`@${user.username}`, width / 2, avatarY + avatarSize + 150);
 
         // 8. Branding (Bottom)
         ctx.fillStyle = '#FF4500';
         ctx.font = 'bold 30px Sans-serif';
-        ctx.fillText('Vynn.io', width / 2, height - 40);
+        ctx.fillText('Vynn.me', width / 2, height - 40);
 
         // Response
         res.set('Content-Type', 'image/png');

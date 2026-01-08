@@ -317,4 +317,30 @@ router.get('/:username', optionalAuth, async (req, res) => {
     }
 });
 
+// @route   GET /api/profiles/:username/avatar
+// @desc    Redirect to user's avatar
+// @access  Public
+router.get('/:username/avatar', async (req, res) => {
+    try {
+        const { username } = req.params;
+        const user = await User.findOne({ username: username.toLowerCase() });
+        if (!user) return res.status(404).send('User not found');
+
+        const profile = await Profile.findOne({ user: user._id });
+        if (profile && profile.avatar) {
+            return res.redirect(profile.avatar);
+        }
+
+        // Fallback to Discord avatar if available
+        if (user.discord && user.discord.avatarUrl) {
+            return res.redirect(user.discord.avatarUrl);
+        }
+
+        // Final fallback to default logo
+        res.redirect('https://vynn.me/logo.png');
+    } catch (error) {
+        res.status(500).send('Error');
+    }
+});
+
 module.exports = router;

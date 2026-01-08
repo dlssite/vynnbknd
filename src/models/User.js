@@ -125,7 +125,7 @@ const userSchema = new mongoose.Schema({
         },
         source: {
             type: String,
-            enum: ['referral', 'purchase', 'level_up', 'achievement', 'admin', 'signup_bonus']
+            enum: ['referral', 'purchase', 'level_up', 'achievement', 'admin', 'signup_bonus', 'daily', 'transfer']
         },
         description: String,
         relatedItem: {
@@ -202,7 +202,8 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
-    lastLoginAt: Date
+    lastLoginAt: Date,
+    lastDaily: Date
 }, {
     timestamps: true
 });
