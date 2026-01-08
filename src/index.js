@@ -27,6 +27,7 @@ const allowedOrigins = [
   'https://www.vynn.me',
   'https://www.vynn-me.netlify.app',
   'https://vynn-me.netlify.app',
+  'https://vynnbot.onrender.com',
   process.env.FRONTEND_URL,
   ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
 ].filter(Boolean);
