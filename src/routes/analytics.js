@@ -168,6 +168,10 @@ router.get('/stats', requireAuth, async (req, res) => {
         // CTR & Bounce
         const sessionsWithClicks = sessions.filter(s => s.clicks && s.clicks.length > 0).length;
         const totalClicks = sessions.reduce((acc, s) => acc + (s.clicks ? s.clicks.length : 0), 0);
+        const totalDiscordJoins = sessions.reduce((acc, s) => {
+            const joins = s.clicks ? s.clicks.filter(c => c.type === 'discord_server').length : 0;
+            return acc + joins;
+        }, 0);
 
         const ctr = totalViews ? ((sessionsWithClicks / totalViews) * 100).toFixed(1) + '%' : '0%';
         const bounceRate = totalViews ? (((totalViews - sessionsWithClicks) / totalViews) * 100).toFixed(0) + '%' : '0%';
@@ -269,6 +273,8 @@ router.get('/stats', requireAuth, async (req, res) => {
                 // Format: "Platform (Username)" or just "Platform"
                 const platform = social.platform.charAt(0).toUpperCase() + social.platform.slice(1); // Capitalize
                 return social.username ? `${platform} (${social.username})` : platform;
+            } else if (type === 'discord_server') {
+                return 'Discord: Server Join';
             }
             return url;
         };
@@ -309,7 +315,8 @@ router.get('/stats', requireAuth, async (req, res) => {
                 ctr,
                 avgTime: avgTimeFormatted,
                 bounceRate,
-                liveVisitors
+                liveVisitors,
+                discordJoins: totalDiscordJoins.toLocaleString()
             },
             viewsData,
             devices,

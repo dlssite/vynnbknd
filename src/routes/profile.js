@@ -15,7 +15,9 @@ const router = express.Router();
 // @access  Private
 router.get('/@me', auth, async (req, res) => {
     try {
-        let profile = await Profile.findOne({ user: req.user._id }).populate('frame');
+        let profile = await Profile.findOne({ user: req.user._id })
+            .populate('frame')
+            .populate('displayedBadges');
 
         if (!profile) {
             // Create profile if doesn't exist
@@ -69,7 +71,8 @@ router.put('/@me', auth, [
 
         const allowedUpdates = [
             'bio', 'avatar', 'banner', 'themeConfig', 'links', 'socials',
-            'frame', 'commissionStatus', 'isNSFW', 'showViewCount', 'isPublic'
+            'frame', 'commissionStatus', 'isNSFW', 'showViewCount', 'isPublic',
+            'entranceText', 'entranceFont'
         ];
 
         const updates = {};
@@ -102,6 +105,38 @@ router.put('/@me', auth, [
         });
     } catch (error) {
         console.error('Update profile error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// @route   PUT /api/profiles/@me/badges
+// @desc    Update displayed badges order
+// @access  Private
+router.put('/@me/badges', auth, async (req, res) => {
+    try {
+        const { badgeIds } = req.body;
+
+        if (!Array.isArray(badgeIds)) {
+            return res.status(400).json({ error: 'badgeIds must be an array' });
+        }
+
+        // Optional: Validate that user owns these badges
+        const user = await User.findById(req.user.id);
+        const ownedBadgeIds = user.badges.map(b => b.toString());
+        const validBadgeIds = badgeIds.filter(id => ownedBadgeIds.includes(id.toString()));
+
+        const profile = await Profile.findOneAndUpdate(
+            { user: req.user._id },
+            { $set: { displayedBadges: validBadgeIds } },
+            { new: true }
+        ).populate('displayedBadges');
+
+        res.json({
+            message: 'Showcase updated',
+            displayedBadges: profile.displayedBadges
+        });
+    } catch (error) {
+        console.error('Update badges error:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -262,7 +297,9 @@ router.get('/:username', optionalAuth, async (req, res) => {
             return res.status(404).json({ error: 'Profile not found' });
         }
 
-        const profile = await Profile.findOne({ user: user._id }).populate('frame');
+        const profile = await Profile.findOne({ user: user._id })
+            .populate('frame')
+            .populate('displayedBadges');
 
         if (!profile) {
             return res.status(404).json({ error: 'Profile not found' });
@@ -279,6 +316,11 @@ router.get('/:username', optionalAuth, async (req, res) => {
             await profile.incrementViews();
             // Add XP to profile owner for view
             await user.addXP(1);
+
+            // Check for view milestones
+            const { checkViewBadges } = require('../services/badgeService');
+            // Using a non-blocking check
+            checkViewBadges(user._id).catch(err => console.error('View milestone check error:', err));
         }
 
         res.json({
@@ -308,7 +350,8 @@ router.get('/:username', optionalAuth, async (req, res) => {
                 frame: profile.frame,
                 commissionStatus: profile.commissionStatus,
                 isNSFW: profile.isNSFW,
-                views: profile.showViewCount ? profile.views : null
+                views: profile.showViewCount ? profile.views : null,
+                displayedBadges: profile.displayedBadges // Return ordered badges
             }
         });
     } catch (error) {

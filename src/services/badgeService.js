@@ -117,6 +117,87 @@ const initSystemBadges = async () => {
             category: 'achievement',
             isSystem: true,
             systemKey: 'referral_godlike'
+        },
+        // View Milestones
+        {
+            name: 'Observer',
+            slug: 'observer',
+            description: 'Reached 500 profile views. People are watching.',
+            icon: 'FaEye',
+            color: '#94a3b8',
+            category: 'achievement',
+            isSystem: true,
+            systemKey: 'view_observer'
+        },
+        {
+            name: 'Rising Star',
+            slug: 'rising-star',
+            description: 'Reached 1,000 profile views. You\'re gaining traction.',
+            icon: 'FaChartLine',
+            color: '#fbbf24',
+            category: 'achievement',
+            isSystem: true,
+            systemKey: 'view_rising_star'
+        },
+        {
+            name: 'Socialite',
+            slug: 'socialite',
+            description: 'Reached 2,500 profile views. A social butterfly.',
+            icon: 'FaUsers',
+            color: '#818cf8',
+            category: 'achievement',
+            isSystem: true,
+            systemKey: 'view_socialite'
+        },
+        {
+            name: 'Influencer',
+            slug: 'influencer',
+            description: 'Reached 5,000 profile views. Your voice matters.',
+            icon: 'FaMicrophone',
+            color: '#f472b6',
+            category: 'achievement',
+            isSystem: true,
+            systemKey: 'view_influencer'
+        },
+        {
+            name: 'Superstar',
+            slug: 'superstar',
+            description: 'Reached 10,000 profile views. A household name.',
+            icon: 'FaStar',
+            color: '#fb7185',
+            category: 'achievement',
+            isSystem: true,
+            systemKey: 'view_superstar'
+        },
+        {
+            name: 'Celebrity',
+            slug: 'celebrity',
+            description: 'Reached 25,000 profile views. Paparazzi everywhere!',
+            icon: 'FaCamera',
+            color: '#c084fc',
+            category: 'achievement',
+            isSystem: true,
+            systemKey: 'view_celebrity'
+        },
+        {
+            name: 'Internet Sensation',
+            slug: 'internet-sensation',
+            description: 'Reached 50,000 profile views. You\'ve gone viral.',
+            icon: 'FaBolt',
+            color: '#2dd4bf',
+            category: 'achievement',
+            isSystem: true,
+            systemKey: 'view_sensation'
+        },
+        {
+            name: 'World Class',
+            slug: 'world-class',
+            description: 'Reached 100,000 profile views. Known across the globe.',
+            icon: 'FaGlobeAmericas',
+            color: '#38bdf8',
+            category: 'achievement',
+            isSystem: true,
+            systemKey: 'view_world_class'
         }
     ];
 
@@ -240,15 +321,74 @@ const checkReferralBadges = async (userId) => {
     }
 };
 
+/**
+ * Checks and awards view milestone badges and rewards.
+ * @param {string} userId - The user ID.
+ */
+const checkViewBadges = async (userId) => {
+    try {
+        const Profile = require('../models/Profile'); // Lazy load to avoid circular dependency
+        const user = await User.findById(userId);
+        if (!user) return;
+
+        const profile = await Profile.findOne({ user: userId });
+        if (!profile) return;
+
+        const totalViews = profile.views || 0;
+
+        // Define view badges and rewards
+        const viewMilestones = [
+            { count: 500, badgeId: 'observer', name: 'Observer', xp: 500 },
+            { count: 1000, badgeId: 'rising-star', name: 'Rising Star', xp: 1000 },
+            { count: 2500, badgeId: 'socialite', name: 'Socialite', xp: 2500 },
+            { count: 5000, badgeId: 'influencer', name: 'Influencer', xp: 5000 },
+            { count: 10000, badgeId: 'superstar', name: 'Superstar', xp: 10000 },
+            { count: 25000, badgeId: 'celebrity', name: 'Celebrity', xp: 25000 },
+            { count: 50000, badgeId: 'internet-sensation', name: 'Internet Sensation', xp: 50000 },
+            { count: 100000, badgeId: 'world-class', name: 'World Class', xp: 100000 }
+        ];
+
+        let updated = false;
+
+        for (const milestone of viewMilestones) {
+            if (totalViews >= milestone.count) {
+                const badge = await Badge.findOne({ slug: milestone.badgeId });
+                // If badge exists and user doesn't have it yet -> Award it + Rewards
+                if (badge && !user.badges.some(b => b.equals(badge._id))) {
+                    user.badges.push(badge._id);
+
+                    // Award Milestone Rewards
+                    if (milestone.xp) {
+                        await user.addXP(milestone.xp);
+                        console.log(`User ${user.username} earned ${milestone.xp} XP for ${milestone.name} badge (Views: ${totalViews})`);
+                    }
+
+                    updated = true;
+                    console.log(`User ${user.username} earned ${milestone.name} badge for views!`);
+                }
+            }
+        }
+
+        if (updated) {
+            await user.save();
+        }
+    } catch (error) {
+        console.error('Error checking view badges:', error);
+    }
+};
+
 // Also export a helper for checking all automated badges (referral + potentially others)
 const checkAutomaticBadges = async (userId) => {
     await syncUserDiscordBadges(await User.findById(userId));
     await checkReferralBadges(userId);
+    await checkViewBadges(userId);
 };
 
 module.exports = {
     initSystemBadges,
     syncUserDiscordBadges,
+    syncUserDiscordBadges,
     checkReferralBadges,
+    checkViewBadges,
     checkAutomaticBadges
 };

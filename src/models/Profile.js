@@ -82,7 +82,8 @@ const profileSchema = new mongoose.Schema({
             accent: { type: String, default: '#FF8C00' },
             background: { type: String, default: '#050505' },
             text: { type: String, default: '#ffffff' },
-            cardBackground: { type: String, default: 'rgba(255, 255, 255, 0.05)' }
+            cardBackground: { type: String, default: 'rgba(255, 255, 255, 0.05)' },
+            cardBackground2: { type: String, default: 'rgba(255, 255, 255, 0.05)' }
         },
         background: {
             type: { type: String, enum: ['color', 'image', 'video'], default: 'color' },
@@ -113,7 +114,15 @@ const profileSchema = new mongoose.Schema({
             url: { type: String, default: '' },
             autoPlay: { type: Boolean, default: false }
         },
-        cursorUrl: { type: String, default: '' }
+        cursorUrl: { type: String, default: '' },
+        entranceText: { type: String, default: 'click to enter...' },
+        entranceFont: { type: String, default: 'Courier New' },
+        layout: {
+            borderWidth: { type: Number, default: 1 },
+            borderColor: { type: String, default: 'rgba(255,255,255,0.1)' },
+            borderColor2: { type: String, default: 'rgba(255,255,255,0.1)' },
+            borderRadius: { type: Number, default: 32 }
+        }
     },
 
     // User Saved Templates

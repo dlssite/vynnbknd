@@ -15,4 +15,17 @@ router.get('/', async (req, res) => {
     }
 });
 
+// @route   GET /api/badges/my
+// @desc    Get user's owned badges
+// @access  Private
+router.get('/my', require('../middleware/auth').auth, async (req, res) => {
+    try {
+        // req.user.badges is already populated by auth middleware
+        res.json(req.user.badges);
+    } catch (error) {
+        console.error('Get My Badges Error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 module.exports = router;

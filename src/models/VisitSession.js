@@ -58,7 +58,7 @@ const visitSessionSchema = new mongoose.Schema({
     clicks: [{
         linkId: String,
         url: String,
-        type: { type: String, enum: ['link', 'social', 'music', 'other'] },
+        type: { type: String, enum: ['link', 'social', 'music', 'discord_server', 'other'] },
         timestamp: { type: Date, default: Date.now }
     }]
 }, {
